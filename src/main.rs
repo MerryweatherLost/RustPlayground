@@ -1,12 +1,17 @@
 use std::fs::OpenOptions;
 use std::{fs, io};
 
-use chrono::Duration;
+use chrono::{Duration, Utc};
 use ron::ser::{to_string_pretty, PrettyConfig};
 use serde::{Deserialize, Serialize};
 
-fn is_string_numeric(str: &String) -> bool {
-    str.chars().any(|c| !c.is_numeric())
+enum ParsedInput {
+    ValidNumber(u64),
+    InvalidInput(String),
+}
+
+fn is_string_numeric(str: String) -> bool {
+    !str.chars().any(|c| c.is_numeric())
 }
 struct DurationConverter {
     value: String,
@@ -17,11 +22,11 @@ impl DurationConverter {
             value: value.to_string(),
         }
     }
-    fn to_seconds(&self) -> i64 {
-        if is_string_numeric(&self.value.clone()) {
-            match self.value.parse::<i64>() {
-                Ok(n) => n,
-                Err(_) => 1,
+    fn to_seconds(&self) -> ParsedInput {
+        if is_string_numeric(self.value.clone()) {
+            match self.value.parse::<u64>() {
+                Ok(n) => ParsedInput::ValidNumber(n),
+                Err(_) => return ParsedInput::InvalidInput(self.value.clone()),
             }
         } else {
             let multiplier = match self.value.chars().last().unwrap_or_else(|| 's') {
@@ -38,9 +43,12 @@ impl DurationConverter {
                 .value
                 .strip_suffix(|_: char| true)
                 .unwrap_or_else(|| "1")
-                .parse::<i64>()
-                .unwrap_or_else(|_| 1);
-            number * multiplier
+                .parse::<u64>();
+
+            match number {
+                Ok(n) => ParsedInput::ValidNumber(n * multiplier),
+                Err(_) => ParsedInput::InvalidInput(self.value.clone()),
+            }
         }
     }
 }
@@ -51,7 +59,7 @@ struct Task {
     due: chrono::DateTime<chrono::Utc>,
 }
 
-fn create_task() -> Task {
+fn create_task() -> Option<Task> {
     let mut task_name = String::new();
     let mut task_desc = String::new();
     let mut task_due = String::new();
@@ -67,18 +75,21 @@ fn create_task() -> Task {
     io::stdin().read_line(&mut task_due).unwrap();
     println!("-------------------------------");
 
-    Task {
-        title: task_name.trim().to_string(),
-        description: task_desc.trim().to_string(),
-        due: chrono::Utc::now()
-            + Duration::seconds(DurationConverter::new(&task_due.trim().to_string()).to_seconds()),
+    match DurationConverter::new(&task_due.trim().to_string()).to_seconds() {
+        ParsedInput::ValidNumber(number) => Some(Task {
+            title: task_name.trim().to_string(),
+            description: task_desc.trim().to_string(),
+            due: chrono::Utc::now() + Duration::seconds(number as i64),
+        }),
+        ParsedInput::InvalidInput(failed_number) => {
+            println!("{:?} is not a valid positive number.", failed_number);
+            None
+        }
     }
 }
 
 fn main() -> anyhow::Result<()> {
-    // defines
     const PATH: &str = "tasks.ron";
-
     // Ensure Creation
     OpenOptions::new()
         .read(true)
@@ -97,7 +108,13 @@ fn main() -> anyhow::Result<()> {
         io::stdin().read_line(&mut choice)?;
         match choice.trim().to_lowercase().as_str() {
             "y" => {
-                tasks.push(create_task());
+                match create_task() {
+                    Some(task) => tasks.push(task),
+                    None => {
+                        println!("Task failed to be created!");
+                        continue;
+                    }
+                }
                 continue;
             }
             _ => break,
@@ -106,21 +123,25 @@ fn main() -> anyhow::Result<()> {
 
     data = to_string_pretty(&tasks, PrettyConfig::new())?;
     fs::write(&PATH, &data)?;
-    let current_tasks = ron::from_str::<Vec<Task>>(&data)?;
 
-    for task in current_tasks.iter() {
+    let mut tasks = ron::from_str::<Vec<Task>>(&data)?;
+
+    for task in tasks.iter() {
         println!("----------------------");
         println!("{:?}", task);
         println!("......................");
-        match task.due <= chrono::Utc::now() {
+        match task.due <= Utc::now() {
             true => {
                 println!("It is time to complete this task.");
-                // current_tasks.retain(|&t| t.title == task.title); -> Cannot move out of a shared reference
             }
             false => println!("It is not time to complete this task yet."),
         }
-        println!("----------------------");
     }
+
+    tasks.retain(|t| t.due >= Utc::now());
+
+    data = to_string_pretty(&tasks, PrettyConfig::new())?;
+    fs::write(&PATH, &data)?;
 
     Ok(())
 }

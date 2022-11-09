@@ -11,7 +11,7 @@ enum ParsedInput {
 }
 
 fn is_string_numeric(str: String) -> bool {
-    !str.chars().any(|c| c.is_numeric())
+    !str.chars().any(|c| !c.is_numeric())
 }
 struct DurationConverter {
     value: String,

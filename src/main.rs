@@ -19,9 +19,12 @@ impl DurationConverter {
     }
     fn to_seconds(&self) -> i64 {
         if is_string_numeric(&self.value.clone()) {
-            self.value.parse::<i64>().unwrap()
+            match self.value.parse::<i64>() {
+                Ok(n) => n,
+                Err(_) => 1,
+            }
         } else {
-            let multiplier = match self.value.chars().last().unwrap() {
+            let multiplier = match self.value.chars().last().unwrap_or_else(|| 's') {
                 's' => 1,
                 'm' => 60,
                 'h' => 3600,
@@ -34,9 +37,9 @@ impl DurationConverter {
             let number = self
                 .value
                 .strip_suffix(|_: char| true)
-                .unwrap()
+                .unwrap_or_else(|| "1")
                 .parse::<i64>()
-                .unwrap();
+                .unwrap_or_else(|_| 1);
             number * multiplier
         }
     }
@@ -85,10 +88,7 @@ fn main() -> anyhow::Result<()> {
 
     let mut data = fs::read_to_string(&PATH)?;
 
-    let mut tasks: Vec<Task> = match ron::from_str::<Vec<Task>>(&data) {
-        Ok(caught_tasks) => caught_tasks,
-        Err(_) => Vec::<Task>::new(),
-    };
+    let mut tasks = ron::from_str::<Vec<Task>>(&data).unwrap_or_else(|_| Vec::new());
 
     loop {
         let mut choice = String::new();

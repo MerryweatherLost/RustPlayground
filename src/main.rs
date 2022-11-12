@@ -11,17 +11,18 @@ enum ParsedInput {
     InvalidInput(String),
 }
 
-fn is_string_numeric(str: String) -> bool {
+fn is_string_numeric(str: &str) -> bool {
     !str.chars().any(|c| !c.is_numeric())
 }
+
 struct DurationConverter;
 
 impl DurationConverter {
-    fn to_seconds(value: &String) -> ParsedInput {
-        if is_string_numeric(value.clone()) {
+    fn to_seconds(value: &str) -> ParsedInput {
+        if is_string_numeric(value) {
             match value.parse::<u64>() {
                 Ok(n) => ParsedInput::ValidNumber(n),
-                Err(_) => return ParsedInput::InvalidInput(value.clone()),
+                Err(_) => return ParsedInput::InvalidInput(value.to_string()),
             }
         } else {
             let multiplier = match value.chars().last().unwrap_or_else(|| 's') {
@@ -41,7 +42,7 @@ impl DurationConverter {
 
             match number {
                 Ok(n) => ParsedInput::ValidNumber(n * multiplier),
-                Err(_) => ParsedInput::InvalidInput(value.clone()),
+                Err(_) => ParsedInput::InvalidInput(value.to_string()),
             }
         }
     }

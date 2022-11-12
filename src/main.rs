@@ -1,6 +1,7 @@
 use std::fs::OpenOptions;
 use std::{fs, io};
 
+use anyhow::{anyhow, Result};
 use chrono::{Duration, Utc};
 use ron::ser::{to_string_pretty, PrettyConfig};
 use serde::{Deserialize, Serialize};
@@ -13,23 +14,17 @@ enum ParsedInput {
 fn is_string_numeric(str: String) -> bool {
     !str.chars().any(|c| !c.is_numeric())
 }
-struct DurationConverter {
-    value: String,
-}
+struct DurationConverter;
+
 impl DurationConverter {
-    fn new(value: &str) -> Self {
-        Self {
-            value: value.to_string(),
-        }
-    }
-    fn to_seconds(&self) -> ParsedInput {
-        if is_string_numeric(self.value.clone()) {
-            match self.value.parse::<u64>() {
+    fn to_seconds(value: &String) -> ParsedInput {
+        if is_string_numeric(value.clone()) {
+            match value.parse::<u64>() {
                 Ok(n) => ParsedInput::ValidNumber(n),
-                Err(_) => return ParsedInput::InvalidInput(self.value.clone()),
+                Err(_) => return ParsedInput::InvalidInput(value.clone()),
             }
         } else {
-            let multiplier = match self.value.chars().last().unwrap_or_else(|| 's') {
+            let multiplier = match value.chars().last().unwrap_or_else(|| 's') {
                 's' => 1,
                 'm' => 60,
                 'h' => 3600,
@@ -39,15 +34,14 @@ impl DurationConverter {
                 'y' => 31536000,
                 _ => 0,
             };
-            let number = self
-                .value
+            let number = value
                 .strip_suffix(|_: char| true)
                 .unwrap_or_else(|| "1")
                 .parse::<u64>();
 
             match number {
                 Ok(n) => ParsedInput::ValidNumber(n * multiplier),
-                Err(_) => ParsedInput::InvalidInput(self.value.clone()),
+                Err(_) => ParsedInput::InvalidInput(value.clone()),
             }
         }
     }
@@ -59,31 +53,34 @@ struct Task {
     due: chrono::DateTime<chrono::Utc>,
 }
 
-fn create_task() -> Option<Task> {
+fn create_task() -> Result<Option<Task>> {
     let mut task_name = String::new();
     let mut task_desc = String::new();
     let mut task_due = String::new();
 
     println!("-------------------------------");
     println!("Enter the Task's Name: ");
-    io::stdin().read_line(&mut task_name).unwrap();
+    io::stdin().read_line(&mut task_name)?;
     println!("Enter the Task's Description: ");
-    io::stdin().read_line(&mut task_desc).unwrap();
+    io::stdin().read_line(&mut task_desc)?;
     println!("When is it due?");
     println!("GUIDE:[s:Seconds, m:Minutes, h:Hours, d:Days, w:Weeks, M:Months, y:Years]");
     println!("Example: 30m :: 30 Minutes");
-    io::stdin().read_line(&mut task_due).unwrap();
+    io::stdin().read_line(&mut task_due)?;
     println!("-------------------------------");
 
-    match DurationConverter::new(&task_due.trim().to_string()).to_seconds() {
-        ParsedInput::ValidNumber(number) => Some(Task {
+    match DurationConverter::to_seconds(&task_due.trim().to_string()) {
+        ParsedInput::ValidNumber(number) => Ok(Some(Task {
             title: task_name.trim().to_string(),
             description: task_desc.trim().to_string(),
             due: chrono::Utc::now() + Duration::seconds(number as i64),
-        }),
+        })),
         ParsedInput::InvalidInput(failed_number) => {
             println!("{:?} is not a valid positive number.", failed_number);
-            None
+            Err(anyhow!(
+                "Failed to create task, cannot parse input of {:?}",
+                failed_number
+            ))
         }
     }
 }
@@ -109,9 +106,15 @@ fn main() -> anyhow::Result<()> {
         match choice.trim().to_lowercase().as_str() {
             "y" => {
                 match create_task() {
-                    Some(task) => tasks.push(task),
-                    None => {
-                        println!("Task failed to be created!");
+                    Ok(task_result) => match task_result {
+                        Some(task) => tasks.push(task),
+                        None => {
+                            println!("Task failed to be created!");
+                            continue;
+                        }
+                    },
+                    Err(ex) => {
+                        println!("There was an error when creating the task! {:?}", ex);
                         continue;
                     }
                 }

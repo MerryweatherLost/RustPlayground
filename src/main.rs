@@ -53,7 +53,7 @@ struct Task {
     due: chrono::DateTime<chrono::Utc>,
 }
 
-fn create_task() -> Result<Option<Task>> {
+fn create_task() -> Result<Task> {
     let mut task_name = String::new();
     let mut task_desc = String::new();
     let mut task_due = String::new();
@@ -70,11 +70,11 @@ fn create_task() -> Result<Option<Task>> {
     println!("-------------------------------");
 
     match DurationConverter::to_seconds(&task_due.trim().to_string()) {
-        ParsedInput::ValidNumber(number) => Ok(Some(Task {
+        ParsedInput::ValidNumber(number) => Ok(Task {
             title: task_name.trim().to_string(),
             description: task_desc.trim().to_string(),
             due: chrono::Utc::now() + Duration::seconds(number as i64),
-        })),
+        }),
         ParsedInput::InvalidInput(failed_number) => {
             println!("{:?} is not a valid positive number.", failed_number);
             Err(anyhow!(
@@ -106,15 +106,9 @@ fn main() -> anyhow::Result<()> {
         match choice.trim().to_lowercase().as_str() {
             "y" => {
                 match create_task() {
-                    Ok(task_result) => match task_result {
-                        Some(task) => tasks.push(task),
-                        None => {
-                            println!("Task failed to be created!");
-                            continue;
-                        }
-                    },
+                    Ok(task) => tasks.push(task),
                     Err(ex) => {
-                        println!("There was an error when creating the task! {:?}", ex);
+                        println!("{}", ex);
                         continue;
                     }
                 }

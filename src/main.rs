@@ -8,7 +8,7 @@ use serde::{Deserialize, Serialize};
 
 enum ParsedInput {
     ValidNumber(u64),
-    InvalidInput(String),
+    InvalidInput,
 }
 
 fn is_string_numeric(str: &str) -> bool {
@@ -22,7 +22,7 @@ impl DurationConverter {
         if is_string_numeric(value) {
             match value.parse::<u64>() {
                 Ok(n) => ParsedInput::ValidNumber(n),
-                Err(_) => return ParsedInput::InvalidInput(value.to_string()),
+                Err(_) => return ParsedInput::InvalidInput,
             }
         } else {
             let multiplier = match value.chars().last().unwrap_or_else(|| 's') {
@@ -42,7 +42,7 @@ impl DurationConverter {
 
             match number {
                 Ok(n) => ParsedInput::ValidNumber(n * multiplier),
-                Err(_) => ParsedInput::InvalidInput(value.to_string()),
+                Err(_) => ParsedInput::InvalidInput,
             }
         }
     }
@@ -76,12 +76,9 @@ fn create_task() -> Result<Task> {
             description: task_desc.trim().to_string(),
             due: chrono::Utc::now() + Duration::seconds(number as i64),
         }),
-        ParsedInput::InvalidInput(failed_number) => {
-            println!("{:?} is not a valid positive number.", failed_number);
-            Err(anyhow!(
-                "Failed to create task, cannot parse input of {:?}",
-                failed_number
-            ))
+        ParsedInput::InvalidInput => {
+            println!("A valid number was not put in.");
+            Err(anyhow!("Failed to create task, cannot parse input"))
         }
     }
 }

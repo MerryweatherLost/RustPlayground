@@ -31,9 +31,11 @@ fn read_user_input(tasks: Arc<Mutex<Vec<Task>>>) {
 }
 
 fn check_tasks(tasks: Arc<Mutex<Vec<Task>>>) {
-    for task in tasks.lock().unwrap().iter() {
-        if task.is_finished {
-            println!("Task \"{:?}\" was completed.", task.name);
+    loop {
+        for task in tasks.lock().unwrap().iter() {
+            if task.is_finished {
+                println!("Task \"{:?}\" was completed.", task.name);
+            }
         }
     }
 }
